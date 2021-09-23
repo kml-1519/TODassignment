@@ -1,0 +1,7 @@
+"0",""
+"0","#2019"
+"0","ggplot() + "
+"0","  geom_sf(data=allTracts, fill=""lightgray"") +"
+"0","  geom_sf(data=joined_metro_stops19, aes(size = Population), colour=""#2CA25F"") +"
+"0","  labs(title = ""Total Population within 0.5 miles of each Metro Station"", subtitle = ""2019"", caption = ""Figure 2.2"") +"
+"0","  mapTheme()"

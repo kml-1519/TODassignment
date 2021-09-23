@@ -1,0 +1,678 @@
+---
+title: "Determining the value of TOD in Washington, D.C."
+author: "Kayla Lumpkin"
+date: "9/24/2021"
+output: github_document
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+## Table of Contents
+1. Introduction 
+2. Looking at TOD's Impact on Population, Total Occupied Housing Units, Median Rent, Median Household Income, and the Share of Renter Occupied Households Across Time and Space in Washington, D.C.
+        + Four Small Multiple (2000 & 2019) Visualizations
+        + Grouped Bar Plot 
+        + Grouped Table 
+3. How Does TOD affect Population and Rent within 0.5 Miles of Each Metro Station?
+        + Population Graduated Symbol Map 
+        + Rent Graduated Symbol Map
+4. Rent Prices Based on Distance from Metro Stops 
+        + Geom Line Plot
+5. Assessing crime Data and TOD
+        + Grouped Bar Plot 
+        + Grouped Table 
+6. Summary of Findings
+
+# Introduction
+The following policy brief seeks to investigate whether or not Transit Oriented Development (TOD) is valued by residents of Washington D.C. Though small in service area size when compared to other major U.S. cities, Washington, D.C. has rapidly developed it’s subway system- or WMATA, to serve the surrounding area’s burgeoning population. The analysis detailed in this policy brief was supported by U.S. Decennial Census and American Community Survey data. The findings lead us to conclude that households value access to transportation and thus, TOD.  
+
+
+## Load Libraries
+```{r setup_package, warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(
+    message = FALSE,
+    warning = FALSE,
+    include = FALSE
+)
+options(scipen=999)
+options(tigris_class = "sf")
+
+
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(tmap)
+library(kableExtra)
+
+census_api_key("1d63e5e6e661f6fd556f9671502bf3879e3a9fd3", overwrite = TRUE)
+
+#multiring buffer function
+  multipleRingBuffer <- function(inputPolygon, maxDistance, interval) 
+  {
+    #create a list of distances that we'll iterate through to create each ring
+    distances <- seq(0, maxDistance, interval)
+    #we'll start with the second value in that list - the first is '0'
+    distancesCounter <- 2
+    #total number of rings we're going to create
+    numberOfRings <- floor(maxDistance / interval)
+    #a counter of number of rings
+    numberOfRingsCounter <- 1
+    #initialize an otuput data frame (that is not an sf)
+    allRings <- data.frame()
+    
+    #while number of rings  counteris less than the specified nubmer of rings
+    while (numberOfRingsCounter <= numberOfRings) 
+    {
+      #if we're interested in a negative buffer and this is the first buffer
+      #(ie. not distance = '0' in the distances list)
+      if(distances[distancesCounter] < 0 & distancesCounter == 2)
+      {
+        #buffer the input by the first distance
+        buffer1 <- st_buffer(inputPolygon, distances[distancesCounter])
+        #different that buffer from the input polygon to get the first ring
+        buffer1_ <- st_difference(inputPolygon, buffer1)
+        #cast this sf as a polygon geometry type
+        thisRing <- st_cast(buffer1_, "POLYGON")
+        #take the last column which is 'geometry'
+        thisRing <- as.data.frame(thisRing[,ncol(thisRing)])
+        #add a new field, 'distance' so we know how far the distance is for a give ring
+        thisRing$distance <- distances[distancesCounter]
+      }
+      
+      
+      #otherwise, if this is the second or more ring (and a negative buffer)
+      else if(distances[distancesCounter] < 0 & distancesCounter > 2) 
+      {
+        #buffer by a specific distance
+        buffer1 <- st_buffer(inputPolygon, distances[distancesCounter])
+        #create the next smallest buffer
+        buffer2 <- st_buffer(inputPolygon, distances[distancesCounter-1])
+        #This can then be used to difference out a buffer running from 660 to 1320
+        #This works because differencing 1320ft by 660ft = a buffer between 660 & 1320.
+        #bc the area after 660ft in buffer2 = NA.
+        thisRing <- st_difference(buffer2,buffer1)
+        #cast as apolygon
+        thisRing <- st_cast(thisRing, "POLYGON")
+        #get the last field
+        thisRing <- as.data.frame(thisRing$geometry)
+        #create the distance field
+        thisRing$distance <- distances[distancesCounter]
+      }
+      
+      #Otherwise, if its a positive buffer
+      else 
+      {
+        #Create a positive buffer
+        buffer1 <- st_buffer(inputPolygon, distances[distancesCounter])
+        #create a positive buffer that is one distance smaller. So if its the first buffer
+        #distance, buffer1_ will = 0. 
+        buffer1_ <- st_buffer(inputPolygon, distances[distancesCounter-1])
+        #difference the two buffers
+        thisRing <- st_difference(buffer1,buffer1_)
+        #cast as a polygon
+        thisRing <- st_cast(thisRing, "POLYGON")
+        #geometry column as a data frame
+        thisRing <- as.data.frame(thisRing[,ncol(thisRing)])
+        #add teh distance
+        thisRing$distance <- distances[distancesCounter]
+      }  
+      
+      #rbind this ring to the rest of the rings
+      allRings <- rbind(allRings, thisRing)
+      #iterate the distance counter
+      distancesCounter <- distancesCounter + 1
+      #iterate the number of rings counter
+      numberOfRingsCounter <- numberOfRingsCounter + 1
+    }
+    
+    #convert the allRings data frame to an sf data frame
+    allRings <- st_as_sf(allRings)
+  }
+```
+
+## Styling
+
+``````{r styling, warning = FALSE, message = FALSE}
+mapTheme <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = 14,colour = "black"),
+    plot.subtitle=element_text(face="italic"),
+    plot.caption=element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=2),
+    strip.text.x = element_text(size = 12))
+}
+
+plotTheme <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = 14,colour = "black"),
+    plot.subtitle = element_text(face="italic"),
+    plot.caption = element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major = element_line("grey80", size = 0.1),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=2),
+    strip.background = element_rect(fill = "grey80", color = "white"),
+    strip.text = element_text(size=12),
+    axis.title = element_text(size=12),
+    axis.text = element_text(size=10),
+    plot.background = element_blank(),
+    legend.background = element_blank(),
+    legend.title = element_text(colour = "black", face = "italic"),
+    legend.text = element_text(colour = "black", face = "italic"),
+    strip.text.x = element_text(size = 12)
+  )
+} 
+
+#Quantile Styling
+
+qBr <- function(df, variable, rnd) {
+ if (missing(rnd)) {
+     as.character(quantile(round(df[[variable]],0),
+     c(.01,.2,.4,.6,.8), na.rm=T))
+} else if (rnd == FALSE | rnd == F) {
+  as.character(formatC(quantile(df[[variable]],
+         c(.01,.2,.4,.6,.8), na.rm=T), digits = 3))
+  }
+}
+
+q5 <- function(variable) {as.factor(ntile(variable, 5))}
+
+#Color Palette used 
+
+palette5 <- c("#feebe2","#fbb4b9","#f768a1","#c51b8a","#7a0177")
+
+```
+
+## ACS Data Used
+
+```{r}
+
+# Selected Variables for 2000 Dec and 2019 ACS: Tenure (Total owner occupied, renter Occupied), Median HH Income, Median Rent, Total Population, Total Housing Units, Total HH Below100p Poverty, and Number of Black Residents
+
+#2000 Decennial Census Data Pull 
+
+dcTracts00 <-  
+  get_decennial(geography = "tract", variables = c("P053001","H056001","P001001",
+                                             "P092001","H007001","H007002","H007003",
+                                             "P006003"), 
+                year=2000, state=11, county=001, geometry=T) %>% 
+  st_transform('ESRI:102685')
+
+#2019 ACS Data Pull 
+
+dcTracts19 <-  
+  get_acs(geography = "tract", variables = c("B19013_001E",  "B25058_001E","B01003_001E","B25001_001E","B06012_002E", "B25026_002E","B25026_009E", "B02001_003E"), 
+                year=2019, state=11, county=001, geometry=T) %>% 
+  st_transform('ESRI:102685')
+
+#This policy brief is better suited to analyze the data in question when it has been spread into the Wide form
+
+#Conversion of 2000 Dec Census Data to Wide Form 
+
+dcTracts00 <- 
+  dcTracts00 %>%
+  dplyr::select( -NAME) %>%
+  spread(variable, value) %>%
+  dplyr::select(-geometry) %>%
+  rename(MedHHInc = P053001, 
+         MedRent = H056001,
+         TotalPop = P001001, TotalHHbPov = P092001, 
+         NumberBlk = P006003, 
+         TotalOHU = H007001,
+         TotalOO = H007002, TotalRO = H007003)
+
+#Conversion of 2019 ACS Census Data to Wide Form 
+
+dcTracts19 <- 
+  dcTracts19 %>%
+  dplyr::select( -NAME, -moe) %>%
+  spread(variable, estimate) %>%
+  dplyr::select(-geometry) %>%
+  rename(MedHHInc = B19013_001, 
+         MedRent = B25058_001,
+         TotalPop = B01003_001, TotalHHbPov = B06012_002, 
+         NumberBlk = B02001_003, 
+         TotalOHU = B25001_001,
+         TotalOO = B25026_002, TotalRO = B25026_009)
+
+#Creating New variables
+
+#2000 Census 
+
+dcTracts00 <- 
+  dcTracts00 %>%
+  mutate(pctBlk = ifelse(TotalPop > 0, NumberBlk / TotalPop, 0),
+         pctRenter = ifelse(TotalOHU > 0, TotalRO / TotalOHU, 0), pctOwner = ifelse(TotalOHU > 0, (TotalOO / TotalOHU), 0),
+         pctPoverty = ifelse(TotalPop > 0, TotalHHbPov / TotalPop, 0),
+         year = "2000") %>%
+  dplyr::select(-NumberBlk,-TotalHHbPov)
+
+#2019 ACS 
+
+dcTracts19 <- 
+  dcTracts19 %>%
+  mutate(pctBlk = ifelse(TotalPop > 0, NumberBlk / TotalPop, 0),
+         pctRenter = ifelse(TotalOHU > 0, TotalRO / TotalOHU, 0), pctOwner = ifelse(TotalOHU > 0, (TotalOO / TotalOHU), 0),
+         pctPoverty = ifelse(TotalPop > 0, TotalHHbPov / TotalPop, 0),
+         year = "2019") %>%
+  dplyr::select(-NumberBlk,-TotalHHbPov)
+
+#Combining 2000 and 2019 Census Data
+
+allTracts <- rbind(dcTracts00,dcTracts19)
+
+```
+
+## WMATA Transit Stops
+
+```{r}
+metro_stops <- 
+  st_read("/Users/kmlum/OneDrive/Documents/GitHub/TODassignment/Metro_Lines.geojson") %>% 
+  st_transform(st_crs(allTracts))
+```
+
+## Map of All D.C. Metro Stops 
+
+```{r}
+ggplot() + 
+  geom_sf(data=st_union(dcTracts19)) +
+  geom_sf(data=metro_stops, 
+          aes(colour = NAME), 
+          show.legend = "point", size= 2) +
+  scale_colour_manual(values = c("blue","green","orange","red","black","yellow")) +
+  labs(title="Metro Stops", 
+       subtitle="Washington, D.C.", 
+       caption="Figure 1") +
+  mapTheme()
+```
+
+## Defining TOD vs. Non-TOD 
+
+```{r}
+#Set a Buffer Zone
+metro_buffers <- 
+  rbind(
+    st_buffer(metro_stops, 2640) %>%
+      mutate(Legend = "Buffer") %>%
+      dplyr::select(Legend),
+    st_union(st_buffer(metro_stops, 2640)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+#Set a Unioned Buffer
+buffer <- filter(metro_buffers, Legend == "Unioned Buffer")
+
+#Selecting D.C. Tracts with their centroid in the buffer zone
+selectCentroids <- 
+  st_centroid(allTracts)[buffer,] %>% 
+  st_drop_geometry() %>%
+  left_join(dplyr::select(allTracts,GEOID)) %>%
+  st_sf() %>%
+  dplyr::select(year,TotalPop, MedRent,TotalOHU,pctRenter, MedHHInc) %>%
+  mutate(Selection_Type = "Select by Centroids")
+
+
+#2000
+
+selectCentroids00 <- 
+  st_centroid(dcTracts00)[buffer,] %>% 
+  st_drop_geometry() %>%
+  left_join(dplyr::select(dcTracts00, GEOID)) %>%
+  st_sf() %>%
+  dplyr::select(year,TotalPop, MedRent,TotalOHU,pctRenter, MedHHInc) %>%
+  mutate(Selection_Type = "Select by Centroids")
+
+#2019
+
+selectCentroids19 <- 
+  st_centroid(dcTracts19)[buffer,] %>% 
+  st_drop_geometry() %>%
+  left_join(dplyr::select(dcTracts19, GEOID)) %>%
+  st_sf() %>%
+  dplyr::select(year,TotalPop, MedRent,TotalOHU,pctRenter, MedHHInc) %>%
+  mutate(Selection_Type = "Select by Centroids")
+
+#Setup continued 
+
+allTracts.group <- 
+  rbind(
+    st_centroid(allTracts)[buffer,] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "TOD"),
+    st_centroid(allTracts)[buffer, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "Non-TOD")) %>%
+  mutate(MedRent.inf = ifelse(year == "2000", MedRent * 1.4847, MedRent)) %>%
+mutate(MedHHInc.inf = ifelse(year == "2000", MedHHInc * 1.4847, MedHHInc))
+
+#TOD Tracts
+tod_areas <- allTracts.group %>%
+  dplyr::select(TOD)%>%
+  filter(TOD=="TOD")
+
+AllTOD_Tracts <- st_union(tod_areas)%>%
+  st_sf()
+
+```
+
+# Looking at TOD's Impact on Population, Median Rent, Median Household Income, and the Share of Renter Occupied Households Across Time and Space in Washington, D.C.
+
+```{r}
+#This portion of the policy brief will concentrate on data comparisons made between TOD and non-TOD areas. TOD areas are defined as census tracts in D.C. within a half mile of a WMATA metro line. Changes in population, median rent, median household income, and share of renters over a period of 2000 to 2019 may provide some insight into the value of TOD areas, and determine if they are more desirable to Washingtonians. 
+
+
+#The first indicator analyzed over 2000 and 2019 is population. If areas near transit are deemed more attractive, consumers renting and purchasing housing units will have likely relocated to TOD areas,or newcomers may have found these areas more convenient thereby increasing the population along metro stop lines.
+
+#Total Population
+
+ggplot(allTracts.group)+
+    geom_sf(data = st_union(dcTracts19))+
+    geom_sf(aes(fill = q5(TotalPop))) +
+    geom_sf(data = buffer, fill = "transparent", color = "red")+
+    scale_fill_manual(values = palette5,
+                      labels = qBr(allTracts.group, "TotalPop"),
+                      name = "Population\n(Quintile Breaks)") +
+    labs(title = "Total Population, 2000-2019", subtitle = "The red border denotes areas close to metro stations", caption = "Figure 1.1") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))
+
+#The two visualizations displayed above shows that D.C.'s population has greatly increased in a 19-year period, with most of the population increase occurring in the northwest quadrants of the district. With one exception in the southeast, TOD areas saw increases in population - though because metro stations are so plentiful in D.C., it is difficult to distinguish if population increases were limited exclusively to TOD areas. 
+
+#The second indicator we observed from 2000 to 2019 is median rent. First, it must be noted that all median rent values from 2000 were adjusted for inflation, and are depicted in  2019 dollars. From 2000 to 2019, median rents have increased across the entire district, and appear to be higher in TOD areas. In 2019, most TOD tracts reported a median rent at around $1,699 a month while surrounding cost about $545 less to live in. This may prove D.C. Residents are willing to may more to live near the metro. 
+
+#Median Rent
+ggplot(allTracts.group)+
+    geom_sf(data = st_union(dcTracts19))+
+    geom_sf(aes(fill = q5(MedRent.inf))) +
+    geom_sf(data = buffer, fill = "transparent", color = "red")+
+    scale_fill_manual(values = palette5,
+                      labels = qBr(allTracts.group, "MedRent.inf"),
+                      name = "Rent\n(Quintile Breaks)") +
+    labs(title = "Median Rent 2000-2019", subtitle = " The red border denotes areas close to metro stations", caption = "Figure 1.2") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))
+
+#The fourth indicator analyzed is median household income over time from 2000 to 2019.As we contemplated above, the increase in median rents in TOD areas may show that residents are willing to pay more to live in TOD areas. By looking at median household income in TOD areas, we hoped to get a sense of whether or not people with "high" incomes lived in TOD areas. Generally,the visualizations prove that in recent years (2019) higher income households do indeed live in TOD areas when compared to non-TOD areas. This could mean that those with flexible incomes were choosing to live near transportation.  
+
+#Median HHInc
+ggplot(allTracts.group)+
+    geom_sf(data = st_union(dcTracts19))+
+    geom_sf(aes(fill = q5(MedHHInc.inf))) +
+    geom_sf(data = buffer, fill = "transparent", color = "red")+
+    scale_fill_manual(values = palette5,
+                      labels = qBr(allTracts.group, "MedHHInc.inf"),
+                      name = "MedianHHIncome\n(Quintile Breaks)") +
+    labs(title = "Median Household Income 2000-2019", subtitle = "Real Dollars, The red border denotes areas close to metro stations", caption = "Figure 1.4") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))
+
+#And finally, we looked at the share of renter occupied housing from 2000 to 2019. If areas near transit are deemed more attractive, then developers will have likely recognized consumers' renting and purchasing patterns, and may have rapidly increased the number of housing units along metro stop lines. Again, D.C. as a whole has undergone many changes, and while the percentage of renters has increased across the area- TOD areas in the southeastern part of the district have seen a stark increase. 
+
+#Percentage of Renter-Occupied Housing Units
+ggplot(allTracts.group)+
+    geom_sf(data = st_union(dcTracts19))+
+    geom_sf(aes(fill = q5(pctRenter))) +
+    geom_sf(data = buffer, fill = "transparent", color = "red")+
+    scale_fill_manual(values = palette5,
+                      labels = qBr(allTracts.group %>% mutate(pctRenter_100 = pctRenter *100), "pctRenter_100"),
+                      name = "ShareofRenters\n(Quintile Breaks)") +
+    labs(title = "Share of Renters 2000-2019", subtitle = "The red border denotes areas close to metro stations", caption = "Figure 1.3") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=22))
+
+
+#Depicting the data shown spatially above in a table and grouped bar plot format serves as an alternative manner in which the changes over time can be viewed.
+
+#Grouped Bar Plot Demonstrating a Change in population, median rent, median household income, and share of renters over Time and Space
+
+#The table below confirms the spatial visualizations depictions of stark increase in median household income, median rent, and total occupied housing units in TOD areas, when compared to non-TOD areas. Although, changes in the percentage of renters and population are both not as stunning, indicating that while TOD areas have increased in rental costs and occupation, they are not as accessible to households earning a modest income, which can explain the marginal population increases. 
+  
+allTracts.Summary <- 
+  st_drop_geometry(allTracts.group) %>%
+  group_by(year, TOD) %>%
+  summarize(Rent = mean(MedRent, na.rm = T),
+            Population = mean(TotalPop, na.rm = T),
+            Total_OccupiedHU = mean(TotalOHU, na.rm = T),
+            Median_HouseholdIncome = mean(MedHHInc, na.rm = T),
+            Percent_Renter = mean(pctRenter, na.rm = T))
+
+#converting to long form
+allTracts.Summary %>%
+  unite(year.TOD, year, TOD, sep = ": ", remove = T) %>%
+  gather(Variable, Value, -year.TOD) %>%
+  mutate(Value = round(Value, 2)) %>%
+  spread(year.TOD, Value) %>%
+  kable() %>%
+    kable_styling() %>%
+    footnote(general_title = "\n",
+             general = "Table 1.1")
+
+
+#Bar plot
+
+allTracts.Summary %>%
+  gather(Variable, Value, -year, -TOD) %>%
+  ggplot(aes(year, Value, fill = TOD)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    facet_wrap(~Variable, scales = "free", ncol=5) +
+    scale_fill_manual(values = c("#dd1c77", "#2c7fb8")) +
+    labs(title = "Indicator differences across time and space", caption = "Figure 1.4") +
+    plotTheme() + theme(legend.position="bottom")
+
+```
+
+
+# How Does TOD affect Population and Rent within 0.5 Miles of Each Metro Station?
+
+```{r}
+#When changes in population and rent are displayed in the form of graduated symbols within a half mile of metro stations, the visualizations allow us make similar assumptions as those detailed above. In regards to potential explanations for similar increases in population between both TOD and non-TOD areas - while rent in TOD areas has increased dramatically-  TOD areas prove to be attractive, but maybe prohibitively costly to most.  
+
+#Arrange 2000 and 2019 Graduated Symbol Maps 
+#Create Buffer around metro stations 
+
+metro_stations <- 
+  st_read("/Users/kmlum/OneDrive/Documents/FALL 2021/Public Policy Analytics/GitHub/TODassignment/Metro_Station_Entrances_in_DC.geojson") %>% 
+  st_transform(st_crs(allTracts))
+
+metroStation_Buffers <- st_buffer(metro_stations, 2640) %>%
+  mutate(Legend = "Buffer")
+
+stations00 <- st_intersection(dcTracts00,metroStation_Buffers)
+stations19 <- st_intersection(dcTracts19,metroStation_Buffers)
+
+station_var00 <- stations00 %>%
+  st_drop_geometry() %>% 
+  group_by(year, NAME) %>%
+  summarize(Population = sum(TotalPop), Rent = mean(MedRent), na.rm = T)
+
+station_var19 <- stations19 %>%
+  st_drop_geometry() %>% 
+  group_by(year, NAME) %>%
+  summarize(Population = sum(TotalPop), Rent = mean(MedRent), na.rm = T)
+
+joined_metro_stops00 <- left_join(metro_stations, station_var00)
+joined_metro_stops19 <- left_join(metro_stations, station_var19)
+
+#Graduate Symbols showing Population (within 0.5 miles of each metro station) 
+#2000
+ggplot() + 
+  geom_sf(data=allTracts, fill="lightgray") +
+  geom_sf(data=joined_metro_stops00, aes(size = Population), colour="#2CA25F") +
+  labs(title = "Total Population within 0.5 miles of each Metro Station", subtitle = "2000", caption = "Figure 2.1") +
+  mapTheme()
+
+#2019
+ggplot() + 
+  geom_sf(data=allTracts, fill="lightgray") +
+  geom_sf(data=joined_metro_stops19, aes(size = Population), colour="#2CA25F") +
+  labs(title = "Total Population within 0.5 miles of each Metro Station", subtitle = "2019", caption = "Figure 2.2") +
+  mapTheme()
+
+#Graduated Symbols showing Rent (within 0.5 miles of each metro station)
+
+#2000
+ggplot() + 
+  geom_sf(data=allTracts, fill="lightgray") +
+  geom_sf(data=joined_metro_stops00, aes(size = Population), colour="#f03b20") +
+  labs(title = "Total Population within 0.5 miles of each Metro Station", subtitle = "2000", caption = "Figure 2.3") +
+  mapTheme()
+#2019
+ggplot() + 
+  geom_sf(data=allTracts, fill="lightgray") +
+  geom_sf(data=joined_metro_stops19, aes(size = Population), colour="#f03b20") +
+  labs(title = "Rent, within 0.5 miles of each Metro Station", subtitle = "2019", caption = "Figure 2.4") +
+  mapTheme()
+```
+
+#Rent Prices Based on Distance from Metro Stops
+```{r}
+#Geom Line Plot, Mean Rent as a Function of Distance to Metro Stations 
+#The plot below depicts a half mile buffer around each Metro station, allowing us to conclude that rent prices are lower the further a unit is from a metro station. There are two  clear exceptions to this, as about 2.5 miles away from stations rents seem to peak, though this could be because historically- wealthy  areas prefer to limit transit accessibility as residents want to remain insular or can easily afford a car. 
+
+#Creating a multi-ring buffer
+dc_buffers <- multipleRingBuffer(buffer, 26400, 2640)
+
+ggplot() + 
+  geom_sf(data = dc_buffers, aes(fill = distance)) + labs(title = "Half Mile Buffers around Metro Stations", caption = "Figure 3.1") +  mapTheme()
+
+
+#Line Plot setup
+
+dcBuffers2 <- rbind(
+  st_buffer(metro_stations,2640) %>% 
+    mutate(Legend = "Buffer") %>% 
+    dplyr::select(Legend),
+  st_union(st_buffer(metro_stations,2640)) %>% 
+    st_sf() %>% 
+    mutate(Legend = "Unionized Buffer"),
+  st_union(st_buffer(metro_stations,1)) %>% 
+    st_sf() %>% 
+    mutate(Legend = "1-foot Buffer")
+)
+
+buffer2 <- filter(dcBuffers2, Legend=="Unionized Buffer")
+onefoot2 <- filter(dcBuffers2, Legend=="1-foot Buffer")
+
+allTracts.rings <-
+  st_join(st_centroid(dplyr::select(allTracts, GEOID, year)), 
+          multipleRingBuffer(onefoot2, 26400, 2640)) %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(allTracts, GEOID, MedRent, year), 
+            by=c("GEOID"="GEOID", "year"="year")) %>%
+  st_sf() %>%
+  mutate(distance = distance / 5280) #convert to miles
+
+#Line plot
+allTracts.rings_summary <-
+  allTracts.rings %>%
+  st_drop_geometry() %>%
+  group_by(distance, year) %>%
+  summarize(Rent = mean(MedRent, na.rm=T)) 
+
+ggplot(data=allTracts.rings_summary,
+       aes(x = distance, y = Rent, colour = year)) + geom_point()+geom_line()+
+  labs(title = "Rent as a Function of Distance to Metro Stations", caption = "Figure 3.2")
+
+```
+```
+
+
+#Assessing Thefts and TOD Areas
+```{r}
+
+#Unfortuantley, the assesment of crime data and it's potential relationship with TOD features crime data from 2009, and not 2000 as that was the earliest avaible year data was avaible. Figure 4.1 does seem to indicate a relationship between TOD, rent, and thefts.However, most incidents of theft are concentrated in TOD areas.
+
+#Pulling Crime Data (Thefts/Other Incidents Only)
+
+#09
+crime09 <- 
+  read.csv("/Users/kmlum/OneDrive/Documents/FALL 2021/Public Policy Analytics/GitHub/TODassignment/Crime_Incidents_in_2009.csv", header = TRUE) %>%
+  mutate(year = "2009") %>%
+  filter(OFFENSE == "THEFT/OTHER")
+  
+#19
+crime19 <- 
+  read.csv("/Users/kmlum/OneDrive/Documents/FALL 2021/Public Policy Analytics/GitHub/TODassignment/Crime_Incidents_in_2019.csv", header = TRUE) %>%
+  mutate(year = "2019") %>%
+  filter(OFFENSE == "THEFT/OTHER")
+
+#sf objects
+crime09.sf <- st_as_sf(crime09, coords = c("LONGITUDE", "LATITUDE"), crs = 4326, agr = "constant") %>%
+    st_transform(st_crs(allTracts.group))
+
+crime19.sf <- st_as_sf(crime19, coords = c("LONGITUDE", "LATITUDE"), crs = 4326, agr = "constant") %>%
+    st_transform(st_crs(allTracts.group))
+  
+#combine
+crime_data <- rbind(crime09.sf,crime19.sf)
+
+#Plot Crime Data
+
+#2009 ACS Data Pull 
+
+dcTracts09 <-  
+  get_acs(geography = "tract", variables = c("B25058_001E")%>% 
+                year=2009, state=11, county=001, geometry=T) %>% 
+  st_transform('ESRI:102685')
+  
+dcTracts09 <- 
+  dcTracts09 %>%
+  dplyr::select( -NAME, -moe) %>%
+  spread(variable, estimate) %>%
+  dplyr::select(-geometry) %>%
+  rename(MedRent = B25058_001)
+  
+allTracts <- rbind(dcTracts00,dcTracts09,dcTracts19)
+
+allTracts.group <- 
+  rbind(
+    st_centroid(allTracts)[buffer,] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "TOD"),
+    st_centroid(allTracts)[buffer, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "Non-TOD")) %>%
+  mutate(MedRent.inf = ifelse(year == "2000", MedRent * 1.4847, MedRent)) %>%
+  mutate(MedRent.inf = ifelse(year == "2009", MedRent * 1.1917, MedRent))
+  
+ggplot()+
+    scale_fill_manual(values = palette5,
+                      labels = qBr(allTracts.group, "MedRent.inf"),
+                      name = "Rent\n(Quintile Breaks)") +
+    geom_sf(data=allTracts.group, aes(fill = q5(MedRent.inf))) +
+    geom_sf(data=crime_data, show.legend = "point", size=0.02, color = "darkblue")+ 
+    geom_sf(data = buffer, fill = "transparent", color = "red")+
+    labs(title = "Theft and Rent in TOD vs. Non-TOD Areas", subtitle = "Real Dollars, The red border denotes areas close to metro stations, Dots are Theft Incidents", caption = "Figure 4.1") +
+    facet_wrap(~year)+
+    mapTheme() + 
+    theme(plot.title = element_text(size=15))
+
+```
+
+
+#Conclusion 
+```{r}
+#The findings detailed in this policy brief indicate that TOD areas are indeed desired by Washingtonians. However, the data indicates that the benefits from living near metro stations may currently only be avaible to high income households, excluding populations that would stand to benefit the most from accesible transit. As such, we believe the City Council should put concerted effort in decreasing rents near TOD areas, so that all Washingtonians can live near the metro, affordably. 
+```
+
