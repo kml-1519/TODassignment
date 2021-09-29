@@ -2,10 +2,10 @@
 title: "Determining the value of TOD in Washington, D.C."
 author: "Kayla Lumpkin"
 date: "9/24/2021"
-output: github_document
-editor_options: 
-  markdown: 
-    wrap: sentence
+output:
+  html_document:
+    toc: true
+    toc_float: true
 ---
 ## Table of Contents
 1. Introduction 
@@ -27,12 +27,12 @@ editor_options:
 The following policy brief seeks to investigate whether or not Transit Oriented Development (TOD) is valued by residents of Washington D.C. Though small in service area size when compared to other major U.S. cities, Washington, D.C. has rapidly developed it’s subway system- or WMATA, to serve the surrounding area’s burgeoning population. The analysis detailed in this policy brief was supported by U.S. Decennial Census and American Community Survey data. The findings lead us to conclude that households value access to transportation and thus, TOD.  
 
 
-## Load Libraries
+## Setting up
 ```{r setup_package, warning = FALSE, message = FALSE}
 knitr::opts_chunk$set(
     message = FALSE,
     warning = FALSE,
-    include = FALSE
+    include = FALSE 
 )
 options(scipen=999)
 options(tigris_class = "sf")
@@ -43,6 +43,7 @@ library(tidycensus)
 library(sf)
 library(tmap)
 library(kableExtra)
+library(shiny)
 
 census_api_key("1d63e5e6e661f6fd556f9671502bf3879e3a9fd3", overwrite = TRUE)
 
@@ -128,11 +129,9 @@ census_api_key("1d63e5e6e661f6fd556f9671502bf3879e3a9fd3", overwrite = TRUE)
     #convert the allRings data frame to an sf data frame
     allRings <- st_as_sf(allRings)
   }
-```
 
 ## Styling
 
-``````{r styling, warning = FALSE, message = FALSE}
 mapTheme <- function(base_size = 12) {
   theme(
     text = element_text( color = "black"),
@@ -190,11 +189,8 @@ q5 <- function(variable) {as.factor(ntile(variable, 5))}
 
 palette5 <- c("#feebe2","#fbb4b9","#f768a1","#c51b8a","#7a0177")
 
-```
 
-## ACS Data Used
-
-```{r}
+#ACS Data Used
 
 # Selected Variables for 2000 Dec and 2019 ACS: Tenure (Total owner occupied, renter Occupied), Median HH Income, Median Rent, Total Population, Total Housing Units, Total HH Below100p Poverty, and Number of Black Residents
 
@@ -274,15 +270,13 @@ allTracts <- rbind(dcTracts00,dcTracts19)
 
 ## WMATA Transit Stops
 
-```{r}
+```{r metro_stops, message = FALSE, warning = FALSE, echo = FALSE}
 metro_stops <- 
   st_read("/Users/kmlum/OneDrive/Documents/GitHub/TODassignment/Metro_Lines.geojson") %>% 
   st_transform(st_crs(allTracts))
-```
 
 ## Map of All D.C. Metro Stops 
 
-```{r}
 ggplot() + 
   geom_sf(data=st_union(dcTracts19)) +
   geom_sf(data=metro_stops, 
@@ -293,6 +287,7 @@ ggplot() +
        subtitle="Washington, D.C.", 
        caption="Figure 1") +
   mapTheme()
+
 ```
 
 ## Defining TOD vs. Non-TOD 
@@ -370,12 +365,12 @@ AllTOD_Tracts <- st_union(tod_areas)%>%
 
 # Looking at TOD's Impact on Population, Median Rent, Median Household Income, and the Share of Renter Occupied Households Across Time and Space in Washington, D.C.
 
-```{r}
-#This portion of the policy brief will concentrate on data comparisons made between TOD and non-TOD areas. TOD areas are defined as census tracts in D.C. within a half mile of a WMATA metro line. Changes in population, median rent, median household income, and share of renters over a period of 2000 to 2019 may provide some insight into the value of TOD areas, and determine if they are more desirable to Washingtonians. 
+This portion of the policy brief will concentrate on data comparisons made between TOD and non-TOD areas. TOD areas are defined as census tracts in D.C. within a half mile of a WMATA metro line. Changes in population, median rent, median household income, and share of renters over a period of 2000 to 2019 may provide some insight into the value of TOD areas, and determine if they are more desirable to Washingtonians. 
 
+## Population
+The first indicator analyzed over 2000 and 2019 is population. If areas near transit are deemed more attractive, consumers renting and purchasing housing units will have likely relocated to TOD areas,or newcomers may have found these areas more convenient thereby increasing the population along metro stop lines.
 
-#The first indicator analyzed over 2000 and 2019 is population. If areas near transit are deemed more attractive, consumers renting and purchasing housing units will have likely relocated to TOD areas,or newcomers may have found these areas more convenient thereby increasing the population along metro stop lines.
-
+```{r ggplot_geom_sf, warning = FALSE, echo = FALSE}
 #Total Population
 
 ggplot(allTracts.group)+
@@ -389,11 +384,14 @@ ggplot(allTracts.group)+
     facet_wrap(~year)+
     mapTheme() + 
     theme(plot.title = element_text(size=22))
+```
 
-#The two visualizations displayed above shows that D.C.'s population has greatly increased in a 19-year period, with most of the population increase occurring in the northwest quadrants of the district. With one exception in the southeast, TOD areas saw increases in population - though because metro stations are so plentiful in D.C., it is difficult to distinguish if population increases were limited exclusively to TOD areas. 
+The two visualizations displayed above shows that D.C.'s population has greatly increased in a 19-year period, with most of the population increase occurring in the northwest quadrants of the district. With one exception in the southeast, TOD areas saw increases in population - though because metro stations are so plentiful in D.C., it is difficult to distinguish if population increases were limited exclusively to TOD areas. 
 
-#The second indicator we observed from 2000 to 2019 is median rent. First, it must be noted that all median rent values from 2000 were adjusted for inflation, and are depicted in  2019 dollars. From 2000 to 2019, median rents have increased across the entire district, and appear to be higher in TOD areas. In 2019, most TOD tracts reported a median rent at around $1,699 a month while surrounding cost about $545 less to live in. This may prove D.C. Residents are willing to may more to live near the metro. 
+## Median Rent
+The second indicator we observed from 2000 to 2019 is median rent. First, it must be noted that all median rent values from 2000 were adjusted for inflation, and are depicted in  2019 dollars. From 2000 to 2019, median rents have increased across the entire district, and appear to be higher in TOD areas. In 2019, most TOD tracts reported a median rent at around $1,699 a month while surrounding cost about $545 less to live in. This may prove D.C. Residents are willing to may more to live near the metro.
 
+```{r medRent, echo=FALSE, message=FALSE, warning=FALSE}
 #Median Rent
 ggplot(allTracts.group)+
     geom_sf(data = st_union(dcTracts19))+
@@ -407,8 +405,11 @@ ggplot(allTracts.group)+
     mapTheme() + 
     theme(plot.title = element_text(size=22))
 
-#The fourth indicator analyzed is median household income over time from 2000 to 2019.As we contemplated above, the increase in median rents in TOD areas may show that residents are willing to pay more to live in TOD areas. By looking at median household income in TOD areas, we hoped to get a sense of whether or not people with "high" incomes lived in TOD areas. Generally,the visualizations prove that in recent years (2019) higher income households do indeed live in TOD areas when compared to non-TOD areas. This could mean that those with flexible incomes were choosing to live near transportation.  
+```
+## Median Household Income
+The fourth indicator analyzed is median household income over time from 2000 to 2019.As we contemplated above, the increase in median rents in TOD areas may show that residents are willing to pay more to live in TOD areas. By looking at median household income in TOD areas, we hoped to get a sense of whether or not people with "high" incomes lived in TOD areas. Generally,the visualizations prove that in recent years (2019) higher income households do indeed live in TOD areas when compared to non-TOD areas. This could mean that those with flexible incomes were choosing to live near transportation.
 
+```{r MedHHInc, echo=FALSE, message=FALSE, warning=FALSE}
 #Median HHInc
 ggplot(allTracts.group)+
     geom_sf(data = st_union(dcTracts19))+
@@ -422,8 +423,11 @@ ggplot(allTracts.group)+
     mapTheme() + 
     theme(plot.title = element_text(size=22))
 
-#And finally, we looked at the share of renter occupied housing from 2000 to 2019. If areas near transit are deemed more attractive, then developers will have likely recognized consumers' renting and purchasing patterns, and may have rapidly increased the number of housing units along metro stop lines. Again, D.C. as a whole has undergone many changes, and while the percentage of renters has increased across the area- TOD areas in the southeastern part of the district have seen a stark increase. 
+```
+## Share of Renter Occupied Households
+And finally, we looked at the share of renter occupied housing from 2000 to 2019. If areas near transit are deemed more attractive, then developers will have likely recognized consumers' renting and purchasing patterns, and may have rapidly increased the number of housing units along metro stop lines. Again, D.C. as a whole has undergone many changes, and while the percentage of renters has increased across the area- TOD areas in the southeastern part of the district have seen a stark increase.
 
+```{r set_ROHH, echo=FALSE, message=FALSE, warning=FALSE}
 #Percentage of Renter-Occupied Housing Units
 ggplot(allTracts.group)+
     geom_sf(data = st_union(dcTracts19))+
@@ -437,13 +441,14 @@ ggplot(allTracts.group)+
     mapTheme() + 
     theme(plot.title = element_text(size=22))
 
+```
 
-#Depicting the data shown spatially above in a table and grouped bar plot format serves as an alternative manner in which the changes over time can be viewed.
+## Depicting the data shown spatially above in a table and grouped bar plot format serves as an alternative manner in which the changes over time can be viewed.
 
-#Grouped Bar Plot Demonstrating a Change in population, median rent, median household income, and share of renters over Time and Space
+Grouped Bar Plot Demonstrating a Change in population, median rent, median household income, and share of renters over Time and Space
 
-#The table below confirms the spatial visualizations depictions of stark increase in median household income, median rent, and total occupied housing units in TOD areas, when compared to non-TOD areas. Although, changes in the percentage of renters and population are both not as stunning, indicating that while TOD areas have increased in rental costs and occupation, they are not as accessible to households earning a modest income, which can explain the marginal population increases. 
-  
+The table below confirms the spatial visualizations depictions of stark increase in median household income, median rent, and total occupied housing units in TOD areas, when compared to non-TOD areas. Although, changes in the percentage of renters and population are both not as stunning, indicating that while TOD areas have increased in rental costs and occupation, they are not as accessible to households earning a modest income, which can explain the marginal population increases.
+```{r set_barplot, echo=FALSE, message=FALSE, warning=FALSE}
 allTracts.Summary <- 
   st_drop_geometry(allTracts.group) %>%
   group_by(year, TOD) %>%
@@ -464,7 +469,6 @@ allTracts.Summary %>%
     footnote(general_title = "\n",
              general = "Table 1.1")
 
-
 #Bar plot
 
 allTracts.Summary %>%
@@ -481,8 +485,8 @@ allTracts.Summary %>%
 
 # How Does TOD affect Population and Rent within 0.5 Miles of Each Metro Station?
 
-```{r}
-#When changes in population and rent are displayed in the form of graduated symbols within a half mile of metro stations, the visualizations allow us make similar assumptions as those detailed above. In regards to potential explanations for similar increases in population between both TOD and non-TOD areas - while rent in TOD areas has increased dramatically-  TOD areas prove to be attractive, but maybe prohibitively costly to most.  
+When changes in population and rent are displayed in the form of graduated symbols within a half mile of metro stations, the visualizations allow us make similar assumptions as those detailed above. In regards to potential explanations for similar increases in population between both TOD and non-TOD areas - while rent in TOD areas has increased dramatically-  TOD areas prove to be attractive, but maybe prohibitively costly to most.
+```{r set_TODrent, echo=FALSE, message=FALSE, warning=FALSE}
 
 #Arrange 2000 and 2019 Graduated Symbol Maps 
 #Create Buffer around metro stations 
@@ -541,10 +545,10 @@ ggplot() +
   mapTheme()
 ```
 
-#Rent Prices Based on Distance from Metro Stops
-```{r}
+# Rent Prices Based on Distance from Metro Stops
+The plot below depicts a half mile buffer around each Metro station, allowing us to conclude that rent prices are lower the further a unit is from a metro station. There are two  clear exceptions to this, as about 2.5 miles away from stations rents seem to peak, though this could be because historically- wealthy  areas prefer to limit transit accessibility as residents want to remain insular or can easily afford a car. 
+```{r set_rent, echo=FALSE, message=FALSE, warning=FALSE}
 #Geom Line Plot, Mean Rent as a Function of Distance to Metro Stations 
-#The plot below depicts a half mile buffer around each Metro station, allowing us to conclude that rent prices are lower the further a unit is from a metro station. There are two  clear exceptions to this, as about 2.5 miles away from stations rents seem to peak, though this could be because historically- wealthy  areas prefer to limit transit accessibility as residents want to remain insular or can easily afford a car. 
 
 #Creating a multi-ring buffer
 dc_buffers <- multipleRingBuffer(buffer, 26400, 2640)
@@ -591,23 +595,18 @@ ggplot(data=allTracts.rings_summary,
   labs(title = "Rent as a Function of Distance to Metro Stations", caption = "Figure 3.2")
 
 ```
-```
 
 
-#Assessing Thefts and TOD Areas
-```{r}
-
-#Unfortuantley, the assesment of crime data and it's potential relationship with TOD features crime data from 2009, and not 2000 as that was the earliest avaible year data was avaible. Figure 4.1 does seem to indicate a relationship between TOD, rent, and thefts.However, most incidents of theft are concentrated in TOD areas.
-
+# Assessing Thefts and TOD Areas
+Unfortunately, the assessment of crime data and it's potential relationship with TOD features crime data from 2009, and not 2000 as that was the earliest available year data was available. Figure 4 does seem to indicate a relationship between TOD, rent, and thefts.However, most incidents of theft are concentrated in TOD areas.
+```{r set_crime, echo=FALSE, message=FALSE, warning=FALSE}
 #Pulling Crime Data (Thefts/Other Incidents Only)
 
-#09
 crime09 <- 
   read.csv("/Users/kmlum/OneDrive/Documents/FALL 2021/Public Policy Analytics/GitHub/TODassignment/Crime_Incidents_in_2009.csv", header = TRUE) %>%
   mutate(year = "2009") %>%
   filter(OFFENSE == "THEFT/OTHER")
   
-#19
 crime19 <- 
   read.csv("/Users/kmlum/OneDrive/Documents/FALL 2021/Public Policy Analytics/GitHub/TODassignment/Crime_Incidents_in_2019.csv", header = TRUE) %>%
   mutate(year = "2019") %>%
@@ -628,9 +627,10 @@ crime_data <- rbind(crime09.sf,crime19.sf)
 #2009 ACS Data Pull 
 
 dcTracts09 <-  
-  get_acs(geography = "tract", variables = c("B25058_001E")%>% 
-                year=2009, state=11, county=001, geometry=T) %>% 
-  st_transform('ESRI:102685')
+  get_acs(geography = "tract", variable = c("B25058_001E"),
+                year=2009, state=11, county=001, geometry=T) %>%
+  st_transform('ESRI:102685') %>%
+  mutate(year = "2009")
   
 dcTracts09 <- 
   dcTracts09 %>%
@@ -639,7 +639,7 @@ dcTracts09 <-
   dplyr::select(-geometry) %>%
   rename(MedRent = B25058_001)
   
-allTracts <- rbind(dcTracts00,dcTracts09,dcTracts19)
+allTracts <- rbind(select(dcTracts00,year,GEOID, MedRent),dcTracts09,select(dcTracts19,year,GEOID,MedRent))
 
 allTracts.group <- 
   rbind(
@@ -670,9 +670,6 @@ ggplot()+
 
 ```
 
-
-#Conclusion 
-```{r}
-#The findings detailed in this policy brief indicate that TOD areas are indeed desired by Washingtonians. However, the data indicates that the benefits from living near metro stations may currently only be avaible to high income households, excluding populations that would stand to benefit the most from accesible transit. As such, we believe the City Council should put concerted effort in decreasing rents near TOD areas, so that all Washingtonians can live near the metro, affordably. 
-```
+# Conclusion
+The findings detailed in this policy brief indicate that TOD areas are indeed desired by Washingtonians. However, the data indicates that the benefits from living near metro stations may currently only be available to high income households, excluding populations that would stand to benefit the most from accessible transit. As such, we believe the City Council should put concerted effort in decreasing rents near TOD areas, so that all Washingtonians can live near the metro, affordable. 
 

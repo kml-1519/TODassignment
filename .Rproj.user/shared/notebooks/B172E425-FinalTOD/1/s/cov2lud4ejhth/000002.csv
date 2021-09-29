@@ -1,0 +1,7 @@
+"0","#Geom Line Plot, Mean Rent as a Function of Distance to Metro Stations "
+"0",""
+"0","#Creating a multi-ring buffer"
+"0","dc_buffers <- multipleRingBuffer(buffer, 26400, 2640)"
+"0",""
+"0","ggplot() + "
+"0","  geom_sf(data = dc_buffers, aes(fill = distance)) + labs(title = ""Half Mile Buffers around Metro Stations"", caption = ""Figure 3.1"") +  mapTheme()"

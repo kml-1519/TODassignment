@@ -6,6 +6,6 @@ server: rpubs.com
 hostUrl: rpubs.com
 appId: https://api.rpubs.com/api/v1/document/812293/df19f2a468ca49d8a7e26a1002ab1ea6
 bundleId: https://api.rpubs.com/api/v1/document/812293/df19f2a468ca49d8a7e26a1002ab1ea6
-url: http://rpubs.com/publish/claim/812293/27feb98c8a7c4d9791a503235780e841
-when: 1632228268.76748
-lastSyncTime: 1632228268.76748
+url: http://rpubs.com/klumpkin97/812293
+when: 1632955867.2426
+lastSyncTime: 1632955867.2426
